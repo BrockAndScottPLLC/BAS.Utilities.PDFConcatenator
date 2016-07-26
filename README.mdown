@@ -1,0 +1,23 @@
+﻿# BAS.Utilities.PDFConcatenator
+
+**Requires**: .NET framework version 4.5.2
+
+**Description**: This library is designed to simplify concatenating multiple PDFs and/or images together into a single final document.
+
+**Author**: [James Boyd](mailto:jboyd@brockandscott.com)
+
+### Usage
+
+````csharp
+	PDFConcatenator pdfStore = new PDFConcatenator();
+	pdfStore.Add(@"path\to\my.pdf");
+	byte[] nextPdf = File.ReadAllBytes(@"path\to\second.pdf");
+	pdfStore.WriteDocument(@"path\to\final.pdf");
+````
+
+### Dependencies
+- iTextSharp-5.5.9
+
+---
+&copy; [Brock & Scott, PLLC 2016](https://www.brockandscott.com)
+Licensed under AGPL 3.0, see [https://www.gnu.org/licenses/agpl-3.0.txt](https://www.gnu.org/licenses/agpl-3.0.txt) for further details.
