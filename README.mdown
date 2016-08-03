@@ -12,6 +12,7 @@
 	PDFConcatenator pdfStore = new PDFConcatenator();
 	pdfStore.Add(@"path\to\my.pdf");
 	byte[] nextPdf = File.ReadAllBytes(@"path\to\second.pdf");
+	pdfStore.Add(nextPdf);
 	pdfStore.WriteDocument(@"path\to\final.pdf");
 ````
 
