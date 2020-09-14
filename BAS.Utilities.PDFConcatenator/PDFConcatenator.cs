@@ -1,6 +1,6 @@
 ﻿/*
  * Author: James Boyd, Description: A library to simplify concatenation of multiple PDFs into a single document and/or create a PDF document from an image.
- * Copyright (C) 2016 Brock & Scott, PLLC
+ * Copyright (C) 2020 Brock & Scott, PLLC
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
  * published by the Free Software Foundation, either version 3 of the
@@ -15,18 +15,25 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 using System;
-using iTextSharp.text.pdf;
 using System.IO;
-using iTextSharp.text;
 using Drawing = System.Drawing;
 
-namespace BAS.Utilities
+namespace Bas.Utilities
 {
+    using iText.Forms;
+    using iText.IO.Image;
+    using iText.IO.Source;
+    using iText.Kernel;
+    using iText.Kernel.Counter.Event;
+    using iText.Kernel.Pdf;
+    using iText.Kernel.Utils;
+    using iText.Layout.Element;
+    using iText.StyledXmlParser.Jsoup.Nodes;
 
     /// <summary>
     /// Class designed to concatenate multiple pdf documents and/or images together into a single PDF document, which is available as a byte[] or can be written to a file path
     /// </summary>
-    public class PDFConcatenator
+    public class PdfConcatenator
     {
         /// <summary>
         /// Protected storage for the full bytes of the document
@@ -36,13 +43,13 @@ namespace BAS.Utilities
         /// Used to enforce locks on access to _fileBytes
         /// </summary>
         protected object _lock = new object();
-        protected const string LICENSE_TXT = @"BAS.Utilities.PDFConcatenator: Copyright (C) 2016 Brock & Scott, PLLC
+        protected const string LICENSE_TXT = @"BAS.Utilities.PdfConcatenator: Copyright (C) 2020 Brock & Scott, PLLC
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as
 published by the Free Software Foundation, either version 3 of the
 License, or (at your option) any later version.
 Please see https://www.gnu.org/licenses/agpl-3.0.txt or LICENSE.txt for the full license.";
-        public PDFConcatenator()
+        public PdfConcatenator()
         {
             Console.WriteLine(LICENSE_TXT);
         }
@@ -54,29 +61,7 @@ Please see https://www.gnu.org/licenses/agpl-3.0.txt or LICENSE.txt for the full
         /// <param name="format">The image format to save the image as</param>
         public void Add(Drawing.Image img, Drawing.Imaging.ImageFormat format = null)
         {
-            byte[] buffer = null;
-            format = format == null ? Drawing.Imaging.ImageFormat.Jpeg : format;
-            using (var ms = new MemoryStream())
-            {
-                using (var doc = new Document(new Rectangle(img.Width, img.Height)))
-                {
-                    using (var writer = PdfWriter.GetInstance(doc, ms))
-                    {
-                        writer.CompressionLevel = PdfStream.BEST_COMPRESSION;
-                        doc.Open();
-                        writer.Open();
-                        doc.NewPage();
-                        writer.CloseStream = false;
-                        Image itxtImg = Image.GetInstance(img, format);
-                        itxtImg.CompressionLevel = PdfStream.BEST_COMPRESSION;
-                        var pageSize = doc.PageSize;
-                        itxtImg.Alignment = Element.ALIGN_CENTER;
-                        doc.Add(itxtImg);
-                    }
-                }
-                buffer = RetrieveAllBytesFromMemoryStream(ms);
-            }
-            AddDocumentToFinalDoc(buffer);
+            throw new NotImplementedException($"Add(Drawing.Image img, Drawing.Imageing.ImageFormat format = null) method not implemented.");
         }
         /// <summary>
         /// Adds a PDF document (from the given path) to the final PDF document
@@ -108,10 +93,11 @@ Please see https://www.gnu.org/licenses/agpl-3.0.txt or LICENSE.txt for the full
         /// <exception cref="ArgumentException">Thrown if the provided byte[] is not a valid PDF document</exception>
         public void Add(byte[] document)
         {
-            PdfReader reader = null;
             try
             {
-                using (reader = new PdfReader(document)) { }
+                var fileSource = new RandomAccessSourceFactory().CreateSource(document);
+
+                using (new PdfReader(fileSource, new ReaderProperties())) { }
             }
             catch (Exception)
             {
@@ -158,34 +144,43 @@ Please see https://www.gnu.org/licenses/agpl-3.0.txt or LICENSE.txt for the full
         /// <param name="tmpDoc">The document to append</param>
         private void AddDocumentToFinalDoc(byte[] tmpDoc)
         {
-            lock (_lock)
+            lock (this._lock)
             {
-                using (var reader = new PdfReader(tmpDoc))
+                using (var ms = new MemoryStream())
+                using (var pdf = new PdfDocument(new PdfWriter(ms).SetSmartMode(true)))
                 {
-                    PdfReader initialReader = null;
-                    if (_fileBytes != null)
+                    if (this._fileBytes != null)
                     {
-                        initialReader = new PdfReader(_fileBytes);
-                    }
-                    using (var ms = new MemoryStream())
-                    {
-                        var doc = new Document();
-                        using (var copier = new PdfCopy(doc, ms))
+                        // Create reader from bytes
+                        using (var memoryStream = new MemoryStream(this._fileBytes))
                         {
-                            copier.Open();
-                            copier.CompressionLevel = PdfStream.BEST_COMPRESSION;
-                            doc.Open();
-                            copier.CloseStream = false;
-                            if (initialReader != null)
-                                copier.AddDocument(initialReader);
-                            copier.AddDocument(reader);
+                            // Create reader from bytes
+                            using (var reader = new PdfReader(memoryStream))
+                            {
+                                var srcDoc = new PdfDocument(reader);
+                                srcDoc.CopyPagesTo(1, srcDoc.GetNumberOfPages(), pdf);
+                            }
                         }
-                        doc.Close();
-                        _fileBytes = RetrieveAllBytesFromMemoryStream(ms);
                     }
+
+                    using (var memoryStream = new MemoryStream(tmpDoc))
+                    {
+                        // Create reader from bytes
+                        using (var reader = new PdfReader(memoryStream))
+                        {
+                            var srcDoc = new PdfDocument(reader);
+                            srcDoc.CopyPagesTo(1, srcDoc.GetNumberOfPages(), pdf);
+                        }
+                    }
+
+                    // Close pdf
+                    pdf.Close();
+
+                    this._fileBytes = ms.ToArray();
                 }
             }
         }
+
         /// <summary>
         /// Retrieve the current bytes from a memory stream
         /// </summary>
@@ -194,12 +189,12 @@ Please see https://www.gnu.org/licenses/agpl-3.0.txt or LICENSE.txt for the full
         /// <see cref="MemoryStream"/>
         private byte[] RetrieveAllBytesFromMemoryStream(MemoryStream ms)
         {
-            byte[] buffer = new byte[ms.Length];
+            var buffer = new byte[ms.Length];
             ms.Seek(0, SeekOrigin.Begin);
             for (long i = 0; i < ms.Length; i++)
                 buffer[i] = (byte)ms.ReadByte();
             return buffer;
         }
-        
+
     }
 }
